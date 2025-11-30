@@ -9,6 +9,9 @@ import zlib
 from collections import namedtuple
 from functools import cmp_to_key
 from argparse import Namespace
+from io import BytesIO
+from PIL import Image
+from types import SimpleNamespace  # for a lightweight Namespace replacement
 
 BlockDataBeginChunk = 'BlockDataBeginChunk'.encode('UTF-16BE')
 BlockDataEndChunk = 'BlockDataEndChunk'.encode('UTF-16BE')
@@ -408,7 +411,7 @@ def iterate_file_chunks(data, filename):
 
     return file_chunks_list
 
-def extract_csp(filename):
+def extract_csp(filename, output_dir=None):
     with open(filename, 'rb') as f:
         data = f.read()
 
@@ -453,53 +456,48 @@ def extract_csp(filename):
     for layer in sqlite_info.layer_sqlite_info:
         layer_names[layer.MainId] = layer.LayerName
 
-    chunks = extract_csp_chunks_data(file_chunks_list, cmd_args.output_dir, chunk_to_layers, layer_names)
-
-    if cmd_args.output_preview_image:
-        save_preview_image(cmd_args.output_preview_image, sqlite_info)
-
+    chunks = extract_csp_chunks_data(file_chunks_list, output_dir, chunk_to_layers, layer_names)
+    
     if cmd_args.output_dir:
-        save_layers_as_png(chunks, cmd_args.output_dir, sqlite_info)
+        save_layers_as_png(chunks, output_dir, sqlite_info)
         #TODO: json with layer structure?..
-
-    if cmd_args.output_psd:
-        save_psd(cmd_args.output_psd, chunks, sqlite_info, layer_ordered)
-
-    if not cmd_args.keep_sqlite:
-        os.unlink(cmd_args.sqlite_file)
 
 # Initialize global variable for the command line result object
 cmd_args = None
 
-def main():
+import tempfile
+from types import SimpleNamespace
+
+def extract_layers(clip_file, output_dir=None):
+    """
+    Extract layers from a .clip file into PNGs.
+    If output_dir is None, uses a temporary folder.
+    Returns:
+        output_dir (str): folder containing PNGs
+        temp_dir (TemporaryDirectory or None): keep alive while using PNGs
+    """
+    temp_dir_created = False
+    if output_dir is None:
+        temp_dir = tempfile.TemporaryDirectory()
+        output_dir = temp_dir.name
+        temp_dir_created = True
+    else:
+        os.makedirs(output_dir, exist_ok=True)
+
+    # --- Initialize cmd_args for extract_csp ---
     global cmd_args
-    cmd_args = Namespace( # want to cut this down as much as possible
-        input_file='fox.clip', # needs to be changed to an input
-        output_psd=None,
-        psd_version=1,
-        output_dir='frames_png',
-        log_level='INFO',
-        sqlite_file='frames_png\\output.sqlite',
-        output_preview_image=None,
-        keep_sqlite=False,
-        text_layer_raster='enable',
-        text_layer_vector='invisible',
-        gradient_layer_raster='enable',
-        gradient_layer_vector='invisible',
-        ignore_zlib_errors=False,
-        blank_psd_preview=False,
-        psd_empty_bitmap_data=False
+    cmd_args = SimpleNamespace(
+        sqlite_file=f"{output_dir}/temp.sqlite",  # temporary sqlite file
+        output_dir=output_dir,
+        output_psd=False,
+        ignore_zlib_errors=True
     )
 
-    logging.basicConfig(level=getattr(logging, cmd_args.log_level.upper()))
-    os.makedirs(cmd_args.output_dir, exist_ok=True)
+    # Main extraction
+    extract_csp(clip_file, output_dir=output_dir)
 
-    global outputs
-    outputs = [cmd_args.output_dir]
+    return output_dir, temp_dir if temp_dir_created else None
 
-    extract_csp(cmd_args.input_file)
 
-    logging.info("export done to %s", ', '.join(f"'{x}'" for x in outputs))
 
-if __name__ == "__main__":
-    main()
+extract_layers("fox.clip")
