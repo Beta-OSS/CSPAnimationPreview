@@ -498,6 +498,3 @@ def extract_layers(clip_file, output_dir=None):
 
     return output_dir, temp_dir if temp_dir_created else None
 
-
-
-extract_layers("fox.clip")
