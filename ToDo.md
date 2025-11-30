@@ -1,0 +1,3 @@
+- Split frames by animation folders in the db.
+- Make a right side bar containing the folders that can be dragged to reorder the frames.
+- Maybe add frame drag adjustments though they should be in order within the folders.
